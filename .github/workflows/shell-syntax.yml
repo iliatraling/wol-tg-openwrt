@@ -1,0 +1,22 @@
+name: Shell syntax
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check POSIX shell syntax
+        run: |
+          set -eu
+          find files -type f \( -name '*.sh' -o -path 'files/usr/bin/wol-gateway' -o -path 'files/etc/init.d/wol-gateway' \) -print |
+          while IFS= read -r file; do
+            echo "Checking $file"
+            sh -n "$file"
+          done

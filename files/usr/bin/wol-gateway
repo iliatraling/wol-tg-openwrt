@@ -1,0 +1,168 @@
+#!/bin/sh
+# Главный процесс Telegram WOL Gateway для OpenWrt.
+
+SCRIPT_DIR="/usr/lib/wol-gateway"
+
+. "$SCRIPT_DIR/config.sh"
+. "$SCRIPT_DIR/telegram.sh"
+. "$SCRIPT_DIR/actions.sh"
+
+umask 077
+
+if [ "$(id -u)" != "0" ]; then
+    printf '%s\n' "WOL Gateway должен запускаться от root." >&2
+    exit 1
+fi
+
+if ! wg_load_config; then
+    printf '%s\n' "Ошибка конфигурации. Подробности: logread или /tmp/wol-gateway.log" >&2
+    exit 1
+fi
+
+command -v curl >/dev/null 2>&1 || {
+    wg_error "Не установлена утилита curl"
+    exit 1
+}
+
+[ -r /usr/share/libubox/jshn.sh ] || {
+    wg_error "Не найдена библиотека jshn.sh из libubox"
+    exit 1
+}
+
+. /usr/share/libubox/jshn.sh
+
+wg_log "Служба запущена"
+
+wg_drain_pending_updates() {
+    local offset=""
+    local response
+    local ok
+    local keys
+    local key
+    local update_id
+    local count
+
+    # При запуске удаляем старые сообщения, чтобы команды из периода простоя
+    # роутера не выполнялись неожиданно после восстановления службы.
+    while :; do
+        response="$(tg_get_updates "$offset" 0)" || return 1
+        json_load "$response" || return 1
+        json_get_var ok ok
+        [ "$ok" = "true" ] || return 1
+
+        json_select result || return 1
+        json_get_keys keys
+        count=0
+
+        for key in $keys; do
+            json_select "$key" || continue
+            json_get_var update_id update_id
+            json_select ..
+
+            case "$update_id" in
+                ''|*[!0-9]*) continue ;;
+            esac
+
+            offset=$((update_id + 1))
+            count=$((count + 1))
+        done
+
+        json_select ..
+        [ "$count" -ge 100 ] || break
+    done
+
+    if [ -n "$offset" ]; then
+        wg_log "Старые Telegram updates отброшены"
+    fi
+    return 0
+}
+
+wg_process_updates() {
+    local response="$1"
+    local ok
+    local keys
+    local key
+    local update_id
+    local user_id
+    local chat_id
+    local message_text
+
+    json_load "$response" || {
+        wg_error "Telegram вернул некорректный JSON"
+        return 1
+    }
+
+    json_get_var ok ok
+    [ "$ok" = "true" ] || {
+        wg_error "Telegram API вернул ok=false"
+        return 1
+    }
+
+    json_select result || return 0
+    json_get_keys keys
+
+    for key in $keys; do
+        user_id=""
+        chat_id=""
+        message_text=""
+        update_id=""
+
+        json_select "$key" || continue
+        json_get_var update_id update_id
+
+        if json_select message 2>/dev/null; then
+            if json_select from 2>/dev/null; then
+                json_get_var user_id id
+                json_select ..
+            fi
+
+            if json_select chat 2>/dev/null; then
+                json_get_var chat_id id
+                json_select ..
+            fi
+
+            json_get_var message_text text
+            json_select ..
+        fi
+
+        json_select ..
+
+        case "$update_id" in
+            ''|*[!0-9]*) continue ;;
+        esac
+
+        # Авторизация выполняется по Telegram sender ID (message.from.id).
+        # Отдельная проверка chat.id намеренно не вводится.
+        if [ -n "$user_id" ] && [ -n "$chat_id" ] && wg_is_allowed_user "$user_id"; then
+            wg_handle_command "$chat_id" "$message_text" || true
+        fi
+
+        # Следующий getUpdates с этим offset подтвердит обработанное обновление.
+        TG_NEXT_OFFSET=$((update_id + 1))
+    done
+
+    json_select ..
+    return 0
+}
+
+# До первого рабочего polling обязательно успешно очищаем очередь обновлений.
+while ! wg_drain_pending_updates; do
+    wg_error "Не удалось очистить очередь Telegram updates; повтор через 5 секунд"
+    sleep 5
+done
+
+TG_NEXT_OFFSET=""
+
+while :; do
+    response="$(tg_get_updates "$TG_NEXT_OFFSET" 25)"
+    if [ $? -ne 0 ] || [ -z "$response" ]; then
+        wg_error "Ошибка long polling Telegram; повтор через 5 секунд"
+        sleep 5
+        continue
+    fi
+
+    if ! wg_process_updates "$response"; then
+        sleep 3
+        continue
+    fi
+done

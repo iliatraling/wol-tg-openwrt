@@ -15,6 +15,7 @@ jobs:
       - name: Check POSIX shell syntax
         run: |
           set -eu
+          sh -n install.sh
           find files -type f \( -name '*.sh' -o -path 'files/usr/bin/wol-gateway' -o -path 'files/etc/init.d/wol-gateway' \) -print |
           while IFS= read -r file; do
             echo "Checking $file"

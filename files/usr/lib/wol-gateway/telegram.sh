@@ -13,7 +13,7 @@ tg_get_updates() {
     fi
 
     printf 'url = "https://api.telegram.org/bot%s/getUpdates?%s"\n' "$BOT_TOKEN" "$query" |
-        curl --config - --silent --show-error --fail \
+        curl --config - --silent --fail \
             --connect-timeout 10 --max-time 40
 }
 
@@ -23,7 +23,7 @@ tg_send_message() {
 
     # chat_id и текст не являются секретами; токен остаётся в stdin curl.
     printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$BOT_TOKEN" |
-        curl --config - --silent --show-error --fail \
+        curl --config - --silent --fail \
             --connect-timeout 10 --max-time 20 \
             --data-urlencode "chat_id=$chat_id" \
             --data-urlencode "text=$message" >/dev/null

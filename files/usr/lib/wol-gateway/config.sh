@@ -45,13 +45,14 @@ wg_csv_get() {
 wg_is_valid_ipv4() {
     # Проверяет IPv4 без обращения к DNS.
     printf '%s\n' "$1" | awk -F '.' '
-        NF != 4 { exit 1 }
-        {
+        BEGIN { valid = 1 }
+        NF != 4 { valid = 0 }
+        NF == 4 {
             for (i = 1; i <= 4; i++) {
-                if ($i !~ /^[0-9]+$/ || $i < 0 || $i > 255) exit 1
+                if ($i !~ /^[0-9]+$/ || $i < 0 || $i > 255) valid = 0
             }
         }
-        END { if (NR == 1) exit 0 }
+        END { exit !valid }
     '
 }
 

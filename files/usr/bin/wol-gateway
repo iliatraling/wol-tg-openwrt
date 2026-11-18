@@ -48,7 +48,7 @@ wg_drain_pending_updates() {
         response="$(tg_get_updates "$offset" 0)" || return 1
         json_load "$response" || return 1
         json_get_var ok ok
-        [ "$ok" = "true" ] || return 1
+        [ "$ok" = "1" ] || return 1
 
         json_select result || return 1
         json_get_keys keys
@@ -95,7 +95,7 @@ wg_process_updates() {
     }
 
     json_get_var ok ok
-    [ "$ok" = "true" ] || {
+    [ "$ok" = "1" ] || {
         wg_error "Telegram API вернул ok=false"
         return 1
     }

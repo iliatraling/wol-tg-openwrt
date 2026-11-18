@@ -32,5 +32,5 @@ tg_send_message() {
     # Проверяем верхнеуровневое поле ok, не сбрасывая jshn-контекст
     # текущего getUpdates: sendMessage вызывается внутри обработки массива updates.
     printf '%s\n' "$response" |
-        grep -Eq '^\{[[:space:]]*"ok"[[:space:]]*:[[:space:]]*true([,}])'
+        grep -Eq '^[{][[:space:]]*"ok"[[:space:]]*:[[:space:]]*true([,}])'
 }

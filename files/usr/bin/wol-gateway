@@ -64,6 +64,7 @@ wg_drain_pending_updates() {
             esac
 
             offset=$((update_id + 1))
+            TG_NEXT_OFFSET="$offset"
             count=$((count + 1))
         done
 
@@ -72,6 +73,7 @@ wg_drain_pending_updates() {
     done
 
     if [ -n "$offset" ]; then
+        TG_NEXT_OFFSET="$offset"
         wg_log "Старые Telegram updates отброшены"
     fi
     return 0
@@ -150,8 +152,6 @@ while ! wg_drain_pending_updates; do
     wg_error "Не удалось очистить очередь Telegram updates; повтор через 5 секунд"
     sleep 5
 done
-
-TG_NEXT_OFFSET=""
 
 while :; do
     response="$(tg_get_updates "$TG_NEXT_OFFSET" 25)"

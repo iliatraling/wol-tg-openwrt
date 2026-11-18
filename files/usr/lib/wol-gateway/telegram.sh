@@ -20,11 +20,18 @@ tg_get_updates() {
 tg_send_message() {
     local chat_id="$1"
     local message="$2"
+    local response
+    local ok
 
     # chat_id и текст не являются секретами; токен остаётся в stdin curl.
-    printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$BOT_TOKEN" |
+    response="$(printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$BOT_TOKEN" |
         curl --config - --silent --fail \
             --connect-timeout 10 --max-time 20 \
             --data-urlencode "chat_id=$chat_id" \
-            --data-urlencode "text=$message" >/dev/null
+            --data-urlencode "text=$message")" || return 1
+
+    # HTTP 200 недостаточно: Telegram может вернуть JSON с ok=false.
+    json_load "$response" || return 1
+    json_get_var ok ok
+    [ "$ok" = "true" ]
 }

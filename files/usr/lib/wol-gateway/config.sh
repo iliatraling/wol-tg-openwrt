@@ -1,11 +1,11 @@
 #!/bin/sh
-# Загрузка и проверка конфигурации WOL Gateway.
+# Load and validate WOL Gateway configuration.
 
 WOL_CONFIG="${WOL_CONFIG:-/etc/wol-gateway.env}"
 WOL_LOG_FILE="/tmp/wol-gateway.log"
 
 wg_log() {
-    # В журнал попадают только внутренние сообщения, без токена и текста пользователя.
+    # Log internal messages only; never include the token or user input.
     local message="$1"
     local timestamp
     local tmp_file
@@ -14,7 +14,7 @@ wg_log() {
     umask 077
     printf '%s %s\n' "$timestamp" "$message" >> "$WOL_LOG_FILE"
 
-    # Оставляем в RAM только последние 30 строк.
+    # Keep only the latest 30 lines in RAM.
     if [ "$(wc -l < "$WOL_LOG_FILE" 2>/dev/null)" -gt 30 ]; then
         tmp_file="${WOL_LOG_FILE}.tmp"
         tail -n 30 "$WOL_LOG_FILE" > "$tmp_file" && mv "$tmp_file" "$WOL_LOG_FILE"
@@ -28,12 +28,12 @@ wg_error() {
 }
 
 wg_csv_count() {
-    # Подсчитывает элементы CSV-списка, не выполняя его содержимое.
+    # Count CSV items without evaluating their contents.
     printf '%s\n' "$1" | awk -F ',' '{ print NF }'
 }
 
 wg_csv_get() {
-    # Возвращает элемент списка по индексу, начиная с единицы.
+    # Return a list item by its one-based index.
     printf '%s\n' "$1" | awk -F ',' -v idx="$2" '{
         value = $idx
         gsub(/^[ \t]+|[ \t]+$/, "", value)
@@ -43,7 +43,7 @@ wg_csv_get() {
 }
 
 wg_is_valid_ipv4() {
-    # Проверяет IPv4 без обращения к DNS.
+    # Validate IPv4 without performing DNS lookups.
     printf '%s\n' "$1" | awk -F '.' '
         BEGIN { valid = 1 }
         NF != 4 { valid = 0 }
@@ -57,7 +57,7 @@ wg_is_valid_ipv4() {
 }
 
 wg_find_target() {
-    # Поиск устройства по алиасу. Результат сохраняется в TARGET_*.
+    # Find a device by alias and populate TARGET_* variables.
     local index
     local count
     local alias
@@ -82,7 +82,7 @@ wg_find_target() {
 }
 
 wg_validate_target_list() {
-    # Проверяет, что каждый алиас существует и не повторяется в запросе.
+    # Check that every alias exists and is not repeated in the request.
     local list="$1"
     local item
     local rest
@@ -124,8 +124,8 @@ wg_validate_target_list() {
 
 wg_load_config() {
     local owner
-    local permissions
-    local permission_value
+    local group_other_permissions
+    local metadata
     local names_count
     local labels_count
     local macs_count
@@ -139,52 +139,48 @@ wg_load_config() {
     local seen
 
     if [ ! -f "$WOL_CONFIG" ] || [ -L "$WOL_CONFIG" ]; then
-        wg_error "Конфигурационный файл отсутствует или является ссылкой"
+        wg_error "Configuration file is missing or is a symbolic link"
         return 1
     fi
 
-    # Конфигурация содержит секрет. Разрешаем чтение только root.
-    owner="$(stat -c '%u' "$WOL_CONFIG" 2>/dev/null)"
-    permissions="$(stat -c '%a' "$WOL_CONFIG" 2>/dev/null)"
-    if [ "$owner" != "0" ] || [ -z "$permissions" ]; then
-        wg_error "Неверный владелец конфигурационного файла"
+    # The configuration contains a secret. Only root may own and access it.
+    # Use BusyBox ls because the OpenWrt image may not include the stat applet.
+    metadata="$(ls -ldn "$WOL_CONFIG" 2>/dev/null)"
+    owner="$(printf '%s\n' "$metadata" | awk 'NR == 1 { print $3 }')"
+    group_other_permissions="$(printf '%s\n' "$metadata" | awk 'NR == 1 { print substr($1, 5, 6) }')"
+
+    if [ "$owner" != "0" ] || [ "$group_other_permissions" != "------" ]; then
+        wg_error "Configuration file must be owned by root and have mode 600 or stricter"
         return 1
     fi
 
-    permission_value=$((0$permissions))
-    if [ $((permission_value & 077)) -ne 0 ]; then
-        wg_error "Права конфигурации слишком широкие; требуется chmod 600"
-        return 1
-    fi
-
-    # Файл shell-совместимый и загружается только после проверки root-владельца
-    # и отсутствия прав чтения/записи/выполнения для group и other.
+    # Load the shell-compatible file only after validating its owner and permissions.
     . "$WOL_CONFIG"
 
-    : "${BOT_TOKEN:?BOT_TOKEN не задан}"
-    : "${ALLOWED_USER_IDS:?ALLOWED_USER_IDS не задан}"
-    : "${TARGET_NAMES:?TARGET_NAMES не задан}"
-    : "${TARGET_LABELS:?TARGET_LABELS не задан}"
-    : "${TARGET_MACS:?TARGET_MACS не задан}"
-    : "${TARGET_IPS:?TARGET_IPS не задан}"
-    : "${DEFAULT_TARGETS:?DEFAULT_TARGETS не задан}"
+    : "${BOT_TOKEN:?BOT_TOKEN is not set}"
+    : "${ALLOWED_USER_IDS:?ALLOWED_USER_IDS is not set}"
+    : "${TARGET_NAMES:?TARGET_NAMES is not set}"
+    : "${TARGET_LABELS:?TARGET_LABELS is not set}"
+    : "${TARGET_MACS:?TARGET_MACS is not set}"
+    : "${TARGET_IPS:?TARGET_IPS is not set}"
+    : "${DEFAULT_TARGETS:?DEFAULT_TARGETS is not set}"
 
     NETWORK_INTERFACE="${NETWORK_INTERFACE:-br-lan}"
 
     printf '%s\n' "$BOT_TOKEN" | grep -Eq '^[0-9]+:[A-Za-z0-9_-]+$' || {
-        wg_error "BOT_TOKEN имеет неверный формат"
+        wg_error "BOT_TOKEN has an invalid format"
         return 1
     }
 
     printf '%s\n' "$ALLOWED_USER_IDS" | awk '
         !/^[0-9]+(,[0-9]+)*$/ { exit 1 }
     ' || {
-        wg_error "ALLOWED_USER_IDS имеет неверный формат"
+        wg_error "ALLOWED_USER_IDS has an invalid format"
         return 1
     }
 
     printf '%s\n' "$NETWORK_INTERFACE" | grep -Eq '^[A-Za-z0-9_.:-]{1,32}$' || {
-        wg_error "NETWORK_INTERFACE имеет неверный формат"
+        wg_error "NETWORK_INTERFACE has an invalid format"
         return 1
     }
 
@@ -197,7 +193,7 @@ wg_load_config() {
        [ "$names_count" -ne "$labels_count" ] ||
        [ "$names_count" -ne "$macs_count" ] ||
        [ "$names_count" -ne "$ips_count" ]; then
-        wg_error "Списки TARGET_NAMES/LABELS/MACS/IPS должны содержать от 1 до 20 парных элементов"
+        wg_error "TARGET_NAMES/LABELS/MACS/IPS must contain 1 to 20 matching items"
         return 1
     fi
 
@@ -210,30 +206,30 @@ wg_load_config() {
         ip="$(wg_csv_get "$TARGET_IPS" "$index")"
 
         printf '%s\n' "$alias" | grep -Eq '^[a-z0-9][a-z0-9-]{0,31}$' || {
-            wg_error "Некорректный алиас устройства в TARGET_NAMES"
+            wg_error "Invalid device alias in TARGET_NAMES"
             return 1
         }
 
         case "$seen" in
-            *" $alias "*) wg_error "Повторяющийся алиас устройства"; return 1 ;;
+            *" $alias "*) wg_error "Duplicate device alias"; return 1 ;;
         esac
         seen="${seen}${alias} "
 
         [ -n "$label" ] || {
-            wg_error "Пустое отображаемое имя устройства"
+            wg_error "Device display label is empty"
             return 1
         }
 
         printf '%s\n' "$mac" | awk '
             !/^[[:xdigit:]][[:xdigit:]](:[[:xdigit:]][[:xdigit:]]){5}$/ { exit 1 }
         ' || {
-            wg_error "Некорректный MAC-адрес устройства"
+            wg_error "Invalid device MAC address"
             return 1
         }
 
         if [ "$ip" != "0" ]; then
             wg_is_valid_ipv4 "$ip" || {
-                wg_error "Некорректный IPv4-адрес устройства"
+                wg_error "Invalid device IPv4 address"
                 return 1
             }
         fi
@@ -242,17 +238,17 @@ wg_load_config() {
     done
 
     wg_validate_target_list "$DEFAULT_TARGETS" || {
-        wg_error "DEFAULT_TARGETS содержит неизвестный или повторяющийся алиас"
+        wg_error "DEFAULT_TARGETS contains an unknown or duplicate alias"
         return 1
     }
 
-    # Убедимся, что в allowlist нет пустых или повторяющихся ID.
+    # Reject empty or duplicate Telegram user IDs in the allowlist.
     seen=" "
     old_ifs="$IFS"
     IFS=','
     for id in $ALLOWED_USER_IDS; do
         case "$seen" in
-            *" $id "*) IFS="$old_ifs"; wg_error "Повторяющийся Telegram User ID"; return 1 ;;
+            *" $id "*) IFS="$old_ifs"; wg_error "Duplicate Telegram User ID"; return 1 ;;
         esac
         seen="${seen}${id} "
     done

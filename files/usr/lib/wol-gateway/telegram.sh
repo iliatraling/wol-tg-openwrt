@@ -21,7 +21,6 @@ tg_send_message() {
     local chat_id="$1"
     local message="$2"
     local response
-    local ok
 
     # chat_id и текст не являются секретами; токен остаётся в stdin curl.
     response="$(printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$BOT_TOKEN" |
@@ -30,8 +29,8 @@ tg_send_message() {
             --data-urlencode "chat_id=$chat_id" \
             --data-urlencode "text=$message")" || return 1
 
-    # HTTP 200 недостаточно: Telegram может вернуть JSON с ok=false.
-    json_load "$response" || return 1
-    json_get_var ok ok
-    [ "$ok" = "true" ]
+    # Проверяем верхнеуровневое поле ok, не сбрасывая jshn-контекст
+    # текущего getUpdates: sendMessage вызывается внутри обработки массива updates.
+    printf '%s\n' "$response" |
+        grep -Eq '^\{[[:space:]]*"ok"[[:space:]]*:[[:space:]]*true([,}])'
 }

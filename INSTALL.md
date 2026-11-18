@@ -243,3 +243,78 @@ rm -rf /usr/lib/wol-gateway
 ```
 
 Рабочая конфигурация `/etc/wol-gateway.env` и шаблон `/etc/wol-gateway.env.example` сохраняются намеренно. Удалите их вручную, если приложение больше не понадобится и сохранённый токен не требуется.
+
+
+## Сохранение приложения при обновлении прошивки OpenWrt
+
+При обновлении прошивки через `sysupgrade` произвольные файлы приложений могут не попасть в резервную копию. Чтобы WOL Gateway восстанавливался вместе с конфигурацией, добавьте его установленные файлы в `/etc/sysupgrade.conf`.
+
+**1. Убедитесь, что файлы установлены:**
+
+```sh
+ls -ld \
+/etc/init.d/wol-gateway \
+/etc/wol-gateway.env \
+/usr/bin/wol-gateway \
+/usr/lib/wol-gateway
+```
+
+Если какой-либо путь отличается или отсутствует, не добавляйте его вслепую — сначала проверьте фактическое расположение файлов.
+
+**2. Добавьте пути в список резервирования:**
+
+```sh
+cat >> /etc/sysupgrade.conf <<'EOF'
+/etc/init.d/wol-gateway
+/etc/wol-gateway.env
+/usr/bin/wol-gateway
+/usr/lib/wol-gateway
+EOF
+```
+
+Каталог `/usr/lib/wol-gateway` содержит модули приложения. Команда `sysupgrade -l` покажет их отдельными строками.
+
+**3. Проверьте, что все файлы попали в список:**
+
+```sh
+sysupgrade -l | grep wol-gateway
+```
+
+В проверенной установке Netis NX32U с OpenWrt 25.12.6 вывод содержал:
+
+```text
+/etc/init.d/wol-gateway
+/etc/wol-gateway.env
+/usr/bin/wol-gateway
+/usr/lib/wol-gateway/actions.sh
+/usr/lib/wol-gateway/config.sh
+/usr/lib/wol-gateway/telegram.sh
+```
+
+**4. Перед обновлением прошивки создайте и скачайте резервную копию:**
+
+На роутере:
+
+```sh
+sysupgrade -b /tmp/openwrt-backup.tar.gz
+ls -lh /tmp/openwrt-backup.tar.gz
+```
+
+Скопируйте архив на компьютер. Например, из PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force "C:\\NX32U-OpenWrt\\backup"
+scp -O root@192.168.0.1:/tmp/openwrt-backup.tar.gz "C:\\NX32U-OpenWrt\\backup\\openwrt-backup.tar.gz"
+```
+
+Замените IP роутера и путь на свои. Ключ `-O` нужен для сборок OpenWrt без SFTP-сервера.
+
+**Важно:**
+
+- `sysupgrade -l` показывает файлы, включённые в резервную копию; проверяйте его перед каждым обновлением.
+- Резервная копия содержит `/etc/wol-gateway.env` с Telegram Bot Token. Храните архив приватно и не загружайте его в публичный репозиторий.
+- Это резервирование конфигурации и файлов приложения, а не полный образ прошивки.
+- Сохранение сторонних файлов зависит от механизма обновления и совместимости версий. После обновления проверьте службу командой `/etc/init.d/wol-gateway status` и журналом `logread -e wol-gateway`.
+- Не используйте массовый `apk upgrade` для обновления системных пакетов OpenWrt. Для согласованного обновления прошивки следуйте процедуре, рекомендованной для вашей версии OpenWrt.
+
+Для OpenWrt 25.12 и новее используется пакетный менеджер `apk`; в старых версиях может использоваться `opkg`. См. [шпаргалку перехода с opkg на apk](https://openwrt.org/docs/guide-user/additional-software/opkg-to-apk-cheatsheet).

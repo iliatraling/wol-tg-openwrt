@@ -34,8 +34,8 @@ wg_csv_count() {
 
 wg_csv_get() {
     # Возвращает элемент списка по индексу, начиная с единицы.
-    printf '%s\n' "$1" | awk -F ',' -v index="$2" '{
-        value = $index
+    printf '%s\n' "$1" | awk -F ',' -v idx="$2" '{
+        value = $idx
         gsub(/^[ \t]+|[ \t]+$/, "", value)
         sub(/\r$/, "", value)
         print value

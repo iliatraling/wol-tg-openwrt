@@ -1,0 +1,10 @@
+# Локальные конфигурации и секреты
+.env
+*.env
+!*.env.example
+!files/etc/wol-gateway.env.example
+
+# Логи и временные файлы
+*.log
+*.tmp
+.DS_Store

@@ -59,7 +59,7 @@ test -r /usr/share/libubox/jshn.sh && echo "jshn доступен"
 Скопируйте репозиторий на роутер и из его корня выполните:
 
 ```sh
-make install
+sh install.sh
 cp /etc/wol-gateway.env.example /etc/wol-gateway.env
 vi /etc/wol-gateway.env
 chown root:root /etc/wol-gateway.env
@@ -84,7 +84,9 @@ tail -n 30 /tmp/wol-gateway.log
 ```sh
 /etc/init.d/wol-gateway stop
 /etc/init.d/wol-gateway disable
-make uninstall
+# Удаление выполняется вручную после остановки службы:
+rm -f /usr/bin/wol-gateway /etc/init.d/wol-gateway
+rm -rf /usr/lib/wol-gateway
 ```
 
 ## Команды Telegram

@@ -40,19 +40,22 @@ quote_shell() {
 }
 
 get_config() {
-    load_existing_config || {
-        reply_error "Конфигурация отсутствует или имеет небезопасные права."
+    # Empty values allow initial configuration from LuCI.
+    if is_root_config; then
+        . "$CONFIG_FILE"
+    elif [ -e "$CONFIG_FILE" ] || [ -L "$CONFIG_FILE" ]; then
+        reply_error "Конфигурация имеет небезопасные права."
         return
-    }
+    fi
     json_init
     json_add_boolean ok 1
     [ -n "$BOT_TOKEN" ] && json_add_boolean token_configured 1 || json_add_boolean token_configured 0
-    json_add_string ALLOWED_USER_IDS "$ALLOWED_USER_IDS"
-    json_add_string TARGET_NAMES "$TARGET_NAMES"
-    json_add_string TARGET_LABELS "$TARGET_LABELS"
-    json_add_string TARGET_MACS "$TARGET_MACS"
-    json_add_string TARGET_IPS "$TARGET_IPS"
-    json_add_string DEFAULT_TARGETS "$DEFAULT_TARGETS"
+    json_add_string ALLOWED_USER_IDS "${ALLOWED_USER_IDS:-}"
+    json_add_string TARGET_NAMES "${TARGET_NAMES:-}"
+    json_add_string TARGET_LABELS "${TARGET_LABELS:-}"
+    json_add_string TARGET_MACS "${TARGET_MACS:-}"
+    json_add_string TARGET_IPS "${TARGET_IPS:-}"
+    json_add_string DEFAULT_TARGETS "${DEFAULT_TARGETS:-}"
     json_add_string NETWORK_INTERFACE "${NETWORK_INTERFACE:-br-lan}"
     json_dump
 }
@@ -158,7 +161,7 @@ set_logging() {
 show_status() {
     local running autostart logging configured
     running=0; autostart=0; logging=1; configured=0
-    pgrep -f '/usr/bin/wol-gateway' >/dev/null 2>&1 && running=1
+    pidof wol-gateway >/dev/null 2>&1 && running=1
     [ -L /etc/rc.d/S99wol-gateway ] && autostart=1
     [ "$(uci -q get wol-gateway.main.logging 2>/dev/null)" = "0" ] && logging=0
     is_root_config && configured=1

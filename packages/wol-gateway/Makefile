@@ -11,7 +11,7 @@ define Package/wol-gateway
   SECTION:=utils
   CATEGORY:=Utilities
   TITLE:=Telegram Wake-on-LAN Gateway
-  DEPENDS:=+curl +ca-bundle +etherwake +libubox
+  DEPENDS:=+curl +ca-bundle +etherwake +libubox +uci
 endef
 
 define Package/wol-gateway/description

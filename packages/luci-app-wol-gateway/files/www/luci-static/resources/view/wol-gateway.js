@@ -165,7 +165,9 @@ return view.extend({
 		var statusSection = E('div', { 'class': 'cbi-section' }, [
 			E('h3', 'Управление службой'),
 			E('p', [ 'Состояние: ', E('strong', { 'id': 'wg-running' }, status.running ? 'Работает' : 'Остановлена'),
-				' · Автозапуск: ', E('strong', { 'id': 'wg-autostart' }, status.autostart ? 'Включён' : 'Выключен') ]),
+				' · Автозапуск: ', E('strong', { 'id': 'wg-autostart' }, status.autostart ? 'Включён' : 'Выключен'),
+                ' · Конфигурация: ', E('strong', { 'id': 'wg-config-state' },
+                    !status.configured ? 'Не создана' : (status.config_valid ? 'Корректна' : 'Ошибка проверки')) ]),
 			E('div', { 'class': 'cbi-page-actions' }, [
 				serviceButton('Запустить', 'start'),
 				serviceButton('Остановить', 'stop'),

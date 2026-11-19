@@ -161,18 +161,22 @@ set_logging() {
 }
 
 show_status() {
-    local running autostart logging configured
-    running=0; autostart=0; logging=1; configured=0
+    local running autostart logging configured config_valid
+    running=0; autostart=0; logging=1; configured=0; config_valid=0
     pidof wol-gateway >/dev/null 2>&1 && running=1
     [ -L /etc/rc.d/S99wol-gateway ] && autostart=1
     [ "$(uci -q get wol-gateway.main.logging 2>/dev/null)" = "0" ] && logging=0
-    is_root_config && configured=1
+    if is_root_config; then
+        configured=1
+        WOL_CONFIG="$CONFIG_FILE" sh -c '. /usr/lib/wol-gateway/config.sh; wg_load_config' >/dev/null 2>&1 && config_valid=1
+    fi
     json_init
     json_add_boolean ok 1
     json_add_boolean running "$running"
     json_add_boolean autostart "$autostart"
     json_add_boolean logging "$logging"
     json_add_boolean configured "$configured"
+    json_add_boolean config_valid "$config_valid"
     json_dump
 }
 

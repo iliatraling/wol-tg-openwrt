@@ -14,6 +14,44 @@ if [ "$(id -u)" != "0" ]; then
     exit 1
 fi
 
+# CLI-команды для управления подробным логированием через SSH.
+if [ "$#" -gt 0 ]; then
+    case "$1" in
+        log)
+            case "${2:-status}" in
+                on)
+                    uci set wol-gateway.main=main
+                    uci set wol-gateway.main.logging='1'
+                    uci commit wol-gateway
+                    echo "Подробное логирование включено."
+                    ;;
+                off)
+                    uci set wol-gateway.main=main
+                    uci set wol-gateway.main.logging='0'
+                    uci commit wol-gateway
+                    echo "Подробное логирование выключено; ошибки продолжают записываться."
+                    ;;
+                status)
+                    if wg_logging_enabled; then
+                        echo "Подробное логирование включено."
+                    else
+                        echo "Подробное логирование выключено; ошибки продолжают записываться."
+                    fi
+                    ;;
+                *)
+                    echo "Использование: wol-gateway log [on|off|status]" >&2
+                    exit 2
+                    ;;
+            esac
+            exit 0
+            ;;
+        *)
+            echo "Неизвестная команда. Использование: wol-gateway log [on|off|status]" >&2
+            exit 2
+            ;;
+    esac
+fi
+
 if ! wg_load_config; then
     printf '%s\n' "Ошибка конфигурации. Подробности: logread или /tmp/wol-gateway.log" >&2
     exit 1

@@ -1,0 +1,223 @@
+#!/bin/sh
+# RPC backend: expose only explicit, validated WOL Gateway operations.
+
+. /usr/share/libubox/jshn.sh
+CONFIG_FILE="/etc/wol-gateway.env"
+SERVICE="/etc/init.d/wol-gateway"
+
+reply_error() {
+    json_init
+    json_add_boolean ok 0
+    json_add_string error "$1"
+    json_dump
+}
+
+reply_ok() {
+    json_init
+    json_add_boolean ok 1
+    [ -n "$1" ] && json_add_string message "$1"
+    json_dump
+}
+
+is_root_config() {
+    [ -f "$CONFIG_FILE" ] && [ ! -L "$CONFIG_FILE" ] || return 1
+    local meta owner perms
+    meta="$(ls -ldn "$CONFIG_FILE" 2>/dev/null)"
+    owner="$(printf '%s\n' "$meta" | awk 'NR == 1 { print $3 }')"
+    perms="$(printf '%s\n' "$meta" | awk 'NR == 1 { print substr($1, 5, 6) }')"
+    [ "$owner" = "0" ] && [ "$perms" = "------" ]
+}
+
+load_existing_config() {
+    is_root_config || return 1
+    # Source only a root-owned file with mode 600.
+    . "$CONFIG_FILE"
+}
+
+quote_shell() {
+    # Escape single quotes for a shell-compatible ENV assignment.
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+get_config() {
+    load_existing_config || {
+        reply_error "Конфигурация отсутствует или имеет небезопасные права."
+        return
+    }
+    json_init
+    json_add_boolean ok 1
+    [ -n "$BOT_TOKEN" ] && json_add_boolean token_configured 1 || json_add_boolean token_configured 0
+    json_add_string ALLOWED_USER_IDS "$ALLOWED_USER_IDS"
+    json_add_string TARGET_NAMES "$TARGET_NAMES"
+    json_add_string TARGET_LABELS "$TARGET_LABELS"
+    json_add_string TARGET_MACS "$TARGET_MACS"
+    json_add_string TARGET_IPS "$TARGET_IPS"
+    json_add_string DEFAULT_TARGETS "$DEFAULT_TARGETS"
+    json_add_string NETWORK_INTERFACE "${NETWORK_INTERFACE:-br-lan}"
+    json_dump
+}
+
+save_config() {
+    local token allowed names labels macs ips defaults iface tmp
+    json_load "$(cat)" 2>/dev/null || {
+        reply_error "Не удалось разобрать параметры конфигурации."
+        return
+    }
+    token=""; allowed=""; names=""; labels=""; macs=""; ips=""; defaults=""; iface=""
+    json_get_var token BOT_TOKEN
+    json_get_var allowed ALLOWED_USER_IDS
+    json_get_var names TARGET_NAMES
+    json_get_var labels TARGET_LABELS
+    json_get_var macs TARGET_MACS
+    json_get_var ips TARGET_IPS
+    json_get_var defaults DEFAULT_TARGETS
+    json_get_var iface NETWORK_INTERFACE
+
+    # An empty password field preserves the current token.
+    if [ -z "$token" ]; then
+        load_existing_config || {
+            reply_error "Существующий токен не найден. Введите BOT_TOKEN."
+            return
+        }
+        token="$BOT_TOKEN"
+    fi
+    [ -n "$iface" ] || iface="br-lan"
+
+    tmp="$(mktemp /tmp/wol-gateway.env.XXXXXX)" || {
+        reply_error "Не удалось создать временный файл."
+        return
+    }
+    chmod 600 "$tmp"
+    chown 0:0 "$tmp"
+    {
+        printf 'BOT_TOKEN=%s\n' "$(quote_shell "$token")"
+        printf 'ALLOWED_USER_IDS=%s\n' "$(quote_shell "$allowed")"
+        printf 'TARGET_NAMES=%s\n' "$(quote_shell "$names")"
+        printf 'TARGET_LABELS=%s\n' "$(quote_shell "$labels")"
+        printf 'TARGET_MACS=%s\n' "$(quote_shell "$macs")"
+        printf 'TARGET_IPS=%s\n' "$(quote_shell "$ips")"
+        printf 'DEFAULT_TARGETS=%s\n' "$(quote_shell "$defaults")"
+        printf 'NETWORK_INTERFACE=%s\n' "$(quote_shell "$iface")"
+    } > "$tmp"
+
+    # Run the same validator as the daemon before replacing the active config.
+    if ! WOL_CONFIG="$tmp" sh -c '. /usr/lib/wol-gateway/config.sh; wg_load_config' >/dev/null 2>&1; then
+        rm -f "$tmp"
+        reply_error "Проверка не пройдена. Проверьте обязательные поля, CSV-списки, MAC и IP."
+        return
+    fi
+    if [ -L "$CONFIG_FILE" ]; then
+        rm -f "$tmp"
+        reply_error "Рабочая конфигурация не должна быть символической ссылкой."
+        return
+    fi
+    mv "$tmp" "$CONFIG_FILE" || {
+        rm -f "$tmp"
+        reply_error "Не удалось атомарно сохранить конфигурацию."
+        return
+    }
+    chown 0:0 "$CONFIG_FILE"
+    chmod 600 "$CONFIG_FILE"
+    reply_ok "Настройки сохранены. Перезапустите службу для применения."
+}
+
+service_action() {
+    local action
+    json_load "$(cat)" 2>/dev/null || { reply_error "Некорректный запрос."; return; }
+    json_get_var action action
+    case "$action" in
+        start|stop|restart|enable|disable)
+            "$SERVICE" "$action" >/dev/null 2>&1 || {
+                reply_error "Команда службы завершилась ошибкой."
+                return
+            }
+            reply_ok "Команда выполнена: $action"
+            ;;
+        *) reply_error "Недопустимая операция службы." ;;
+    esac
+}
+
+set_logging() {
+    local enabled
+    json_load "$(cat)" 2>/dev/null || { reply_error "Некорректный запрос."; return; }
+    json_get_var enabled enabled
+    case "$enabled" in
+        1|true)
+            uci set wol-gateway.main=main
+            uci set wol-gateway.main.logging='1' && uci commit wol-gateway
+            ;;
+        0|false)
+            uci set wol-gateway.main=main
+            uci set wol-gateway.main.logging='0' && uci commit wol-gateway
+            ;;
+        *) reply_error "Ожидалось значение 0 или 1."; return ;;
+    esac
+    reply_ok "Настройка логирования сохранена."
+}
+
+show_status() {
+    local running autostart logging configured
+    running=0; autostart=0; logging=1; configured=0
+    pgrep -f '/usr/bin/wol-gateway' >/dev/null 2>&1 && running=1
+    [ -L /etc/rc.d/S99wol-gateway ] && autostart=1
+    [ "$(uci -q get wol-gateway.main.logging 2>/dev/null)" = "0" ] && logging=0
+    is_root_config && configured=1
+    json_init
+    json_add_boolean ok 1
+    json_add_boolean running "$running"
+    json_add_boolean autostart "$autostart"
+    json_add_boolean logging "$logging"
+    json_add_boolean configured "$configured"
+    json_dump
+}
+
+show_logs() {
+    local output
+    # logread reads the in-memory logd ring buffer; no persistent log file is used.
+    output="$(logread -e wol-gateway 2>/dev/null | tail -n 30)"
+    json_init
+    json_add_boolean ok 1
+    json_add_string logs "$output"
+    json_dump
+}
+
+test_telegram() {
+    local response
+    load_existing_config || {
+        reply_error "Конфигурация отсутствует или имеет небезопасные права."
+        return
+    }
+    if ! WOL_CONFIG="$CONFIG_FILE" sh -c '. /usr/lib/wol-gateway/config.sh; wg_load_config' >/dev/null 2>&1; then
+        reply_error "Проверка конфигурации не пройдена."
+        return
+    fi
+    response="$(printf 'url = "https://api.telegram.org/bot%s/getMe"\n' "$BOT_TOKEN" |
+        curl --config - --silent --fail --connect-timeout 8 --max-time 15 2>/dev/null)" || {
+        reply_error "Не удалось подключиться к Telegram Bot API."
+        return
+    }
+    printf '%s\n' "$response" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' || {
+        reply_error "Telegram Bot API отклонил токен или вернул ошибку."
+        return
+    }
+    reply_ok "Telegram API доступен, токен принят."
+}
+
+case "$1" in
+    list)
+        printf '{"status":{},"get_config":{},"save_config":{},"service":{},"set_logging":{},"logs":{},"test_telegram":{}}\n'
+        ;;
+    call)
+        case "$2" in
+            status) show_status ;;
+            get_config) get_config ;;
+            save_config) save_config ;;
+            service) service_action ;;
+            set_logging) set_logging ;;
+            logs) show_logs ;;
+            test_telegram) test_telegram ;;
+            *) reply_error "Неизвестный RPC-метод." ;;
+        esac
+        ;;
+    *) exit 1 ;;
+esac

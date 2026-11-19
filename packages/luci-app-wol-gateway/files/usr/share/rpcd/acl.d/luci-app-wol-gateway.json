@@ -1,0 +1,7 @@
+{
+  "luci-app-wol-gateway": {
+    "description": "Manage the Telegram WOL Gateway service",
+    "read": { "ubus": { "luci.wol-gateway": ["status", "get_config", "logs"] } },
+    "write": { "ubus": { "luci.wol-gateway": ["save_config", "service", "set_logging", "test_telegram"] } }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "admin/services/wol-gateway": {
+    "title": "WOL Gateway",
+    "order": 90,
+    "action": { "type": "view", "path": "wol-gateway" },
+    "depends": { "acl": ["luci-app-wol-gateway"] }
+  }
+}

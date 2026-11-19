@@ -2,29 +2,21 @@
 # Load and validate WOL Gateway configuration.
 
 WOL_CONFIG="${WOL_CONFIG:-/etc/wol-gateway.env}"
-WOL_LOG_FILE="/tmp/wol-gateway.log"
+wg_logging_enabled() {
+    # Подробное логирование включено по умолчанию; состояние хранится в UCI.
+    [ "$(uci -q get wol-gateway.main.logging 2>/dev/null)" != "0" ]
+}
 
 wg_log() {
-    # Log internal messages only; never include the token or user input.
+    # Обычные сообщения идут только в RAM-журнал OpenWrt.
     local message="$1"
-    local timestamp
-    local tmp_file
-
-    timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
-    umask 077
-    printf '%s %s\n' "$timestamp" "$message" >> "$WOL_LOG_FILE"
-
-    # Keep only the latest 30 lines in RAM.
-    if [ "$(wc -l < "$WOL_LOG_FILE" 2>/dev/null)" -gt 30 ]; then
-        tmp_file="${WOL_LOG_FILE}.tmp"
-        tail -n 30 "$WOL_LOG_FILE" > "$tmp_file" && mv "$tmp_file" "$WOL_LOG_FILE"
-    fi
-
+    wg_logging_enabled || return 0
     logger -t wol-gateway "$message" 2>/dev/null
 }
 
 wg_error() {
-    wg_log "ERROR: $1"
+    # Ошибки не отключаются переключателем подробного логирования.
+    logger -p daemon.err -t wol-gateway "ERROR: $1" 2>/dev/null
 }
 
 wg_csv_count() {

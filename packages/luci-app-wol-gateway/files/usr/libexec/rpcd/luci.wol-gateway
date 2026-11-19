@@ -86,7 +86,7 @@ save_config() {
     fi
     [ -n "$iface" ] || iface="br-lan"
 
-    tmp="$(mktemp /tmp/wol-gateway.env.XXXXXX)" || {
+    tmp="$(mktemp /etc/.wol-gateway.env.XXXXXX)" || {
         reply_error "Не удалось создать временный файл."
         return
     }
@@ -146,12 +146,14 @@ set_logging() {
     json_get_var enabled enabled
     case "$enabled" in
         1|true)
-            uci set wol-gateway.main=main
-            uci set wol-gateway.main.logging='1' && uci commit wol-gateway
+            uci set wol-gateway.main=main &&
+                uci set wol-gateway.main.logging='1' &&
+                uci commit wol-gateway || { reply_error "Не удалось сохранить настройку логирования."; return; }
             ;;
         0|false)
-            uci set wol-gateway.main=main
-            uci set wol-gateway.main.logging='0' && uci commit wol-gateway
+            uci set wol-gateway.main=main &&
+                uci set wol-gateway.main.logging='0' &&
+                uci commit wol-gateway || { reply_error "Не удалось сохранить настройку логирования."; return; }
             ;;
         *) reply_error "Ожидалось значение 0 или 1."; return ;;
     esac

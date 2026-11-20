@@ -18,6 +18,11 @@ define Package/wol-gateway/description
  Telegram bot service for sending Wake-on-LAN magic packets from OpenWrt.
 endef
 
+# Пакет содержит готовые скрипты и конфигурацию — компиляция не требуется.
+define Build/Compile
+	:
+endef
+
 define Package/wol-gateway/install
 	$(INSTALL_DIR) $(1)/usr/bin $(1)/usr/lib/wol-gateway $(1)/etc/init.d $(1)/etc $(1)/etc/config
 	$(INSTALL_BIN) ./files/usr/bin/wol-gateway $(1)/usr/bin/wol-gateway

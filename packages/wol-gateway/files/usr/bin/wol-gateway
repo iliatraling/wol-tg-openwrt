@@ -16,10 +16,6 @@ fi
 
 # CLI-команды для управления подробным логированием через SSH.
 if [ "$#" -gt 0 ]; then
-    if [ "$(id -u)" != "0" ]; then
-        echo "Команда управления доступна только root." >&2
-        exit 1
-    fi
     case "$1" in
         log)
             case "${2:-status}" in
@@ -57,7 +53,7 @@ if [ "$#" -gt 0 ]; then
 fi
 
 if ! wg_load_config; then
-    printf '%s\n' "Ошибка конфигурации. Подробности: logread -e wol-gateway" >&2
+    printf '%s\n' "Ошибка конфигурации. Подробности: logread или /tmp/wol-gateway.log" >&2
     exit 1
 fi
 

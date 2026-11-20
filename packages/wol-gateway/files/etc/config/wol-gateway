@@ -1,0 +1,5 @@
+# Настройки WOL Gateway.
+# Подробное логирование включено по умолчанию.
+
+config main 'main'
+	option logging '1'

@@ -19,13 +19,14 @@ define Package/wol-gateway/description
 endef
 
 define Package/wol-gateway/install
-	$(INSTALL_DIR) $(1)/usr/bin $(1)/usr/lib/wol-gateway $(1)/etc/init.d $(1)/etc
+	$(INSTALL_DIR) $(1)/usr/bin $(1)/usr/lib/wol-gateway $(1)/etc/init.d $(1)/etc $(1)/etc/config
 	$(INSTALL_BIN) ./files/usr/bin/wol-gateway $(1)/usr/bin/wol-gateway
 	$(INSTALL_DATA) ./files/usr/lib/wol-gateway/config.sh $(1)/usr/lib/wol-gateway/config.sh
 	$(INSTALL_DATA) ./files/usr/lib/wol-gateway/telegram.sh $(1)/usr/lib/wol-gateway/telegram.sh
 	$(INSTALL_DATA) ./files/usr/lib/wol-gateway/actions.sh $(1)/usr/lib/wol-gateway/actions.sh
 	$(INSTALL_BIN) ./files/etc/init.d/wol-gateway $(1)/etc/init.d/wol-gateway
 	$(INSTALL_CONF) ./files/etc/wol-gateway.env.example $(1)/etc/wol-gateway.env.example
+	$(INSTALL_CONF) ./files/etc/config/wol-gateway $(1)/etc/config/wol-gateway
 endef
 
 $(eval $(call BuildPackage,wol-gateway))

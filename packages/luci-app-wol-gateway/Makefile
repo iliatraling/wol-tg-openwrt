@@ -19,6 +19,11 @@ define Package/luci-app-wol-gateway/description
  LuCI administration interface for the separately packaged WOL Gateway service.
 endef
 
+# Пакет содержит готовые LuCI-файлы — компиляция не требуется.
+define Build/Compile
+	:
+endef
+
 define Package/luci-app-wol-gateway/install
 	$(INSTALL_DIR) $(1)/www/luci-static/resources/view $(1)/usr/share/rpcd/acl.d
 	$(INSTALL_DIR) $(1)/usr/share/luci/menu.d $(1)/usr/libexec/rpcd
